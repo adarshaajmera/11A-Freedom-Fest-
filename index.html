@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#1a120c">
+<meta name="description" content="Walk a 1920s newspaper shop in first person, read the archive, answer what it asks, and file your score on a world leaderboard.">
+<title>Sanyal's Newsstand — 3D Archive Game</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=DM+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,700;0,900;1,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./styles.css">
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js"
+  }
+}
+</script>
+</head>
+
+<body>
+
+<canvas id="scene"></canvas>
+
+<!-- Drag anywhere to look. Sits under the joystick and buttons, which take
+     their own pointer events first. -->
+<div id="look" aria-hidden="true"></div>
+
+<header class="topbar">
+  <div class="title">
+    <small>THE INDEPENDENCE GAZETTE</small>SANYAL’S NEWSSTAND
+    <button id="mute" data-off="no" aria-label="Toggle sound">♪</button>
+  </div>
+
+  <div class="hud">
+    <div class="hud-score">
+      <b id="hudPoints">0</b><span>pts</span>
+      <i id="hudStreak" data-hot="no">×1.00</i>
+    </div>
+    <div class="hearts" id="hearts" data-low="no"></div>
+    <div class="hud-row"><span>ARCHIVE READ</span><b id="readCount">0/32</b></div>
+    <div class="research-bar"><i id="readFill"></i></div>
+    <div class="hud-row"><span>ANSWERED</span><b id="answeredCount">0/32</b></div>
+  </div>
+</header>
+
+<div id="prompt" class="prompt">
+  <span id="promptLabel">THE PRINT RACK</span>
+  <b>PRESS E</b>
+</div>
+
+<div class="joystick" id="joystick" aria-label="Move"><div class="stick" id="stick"></div></div>
+<button class="action" id="action" aria-label="Interact">OPEN<br><small>E</small></button>
+<div class="legend">WASD / ARROWS — WALK · SHIFT + ← → — TURN · DRAG — LOOK · E — OPEN</div>
+
+<!-- The single question card, moved into whichever exhibit is open. -->
+<div class="ask" id="ask" hidden></div>
+
+<!-- The Inspector has you. -->
+<div class="caught" id="caught">
+  <div class="caught-card">
+    <div class="caught-head">
+      <span>STOPPED IN <b id="caughtWhere"></b></span>
+      <span class="by-order">BY ORDER</span>
+    </div>
+    <p class="caught-lede">Answer, and he waves you on. Fail, and it costs a heart.</p>
+    <div id="caughtBody"></div>
+  </div>
+</div>
+
+<!-- Out of hearts. -->
+<div class="caught over" id="over">
+  <div class="caught-card">
+    <div class="caught-head"><span>TAKEN IN</span></div>
+    <div class="total-wrap"><span>FINAL SCORE</span><b id="overPoints">0</b><span>points</span></div>
+    <div id="overLines"></div>
+    <div class="entry">
+      <input id="overName" maxlength="22" placeholder="YOUR NAME FOR THE BOARD" autocomplete="off" spellcheck="false">
+      <button class="begin small" id="overFile">FILE</button>
+    </div>
+    <div class="board-status" id="overStatus">READY</div>
+    <button class="pill" id="restart">START AGAIN</button>
+  </div>
+</div>
+
+<!-- ------------------------------------------------------------- intro -->
+<div class="intro" id="intro">
+  <div class="intro-card">
+    <small>VARANASI · PRINT · WIRELESS · TELEVISION</small>
+    <h1>Sanyal’s Newsstand</h1>
+    <p>
+      A shop of paper and signal, kept in the memory of
+      <b>Sachindra Nath Sanyal</b> (1893—1942) — revolutionary, prisoner of the
+      Cellular Jail, and author of <i>Bandi Jivan</i>.
+    </p>
+    <ol class="how">
+      <li><b>Walk the shop.</b> Joystick, WASD or arrow keys to move. Drag to
+        look around, or hold <b>Shift</b> with <b>←</b> / <b>→</b> to turn.
+        Hold <b>Shift</b> to run — on a phone, push the joystick to the rim.</li>
+      <li><b>Read everything.</b> Thirty-two exhibits, <b>+40</b> each — through
+        the door behind the counter there is a composing room, a passage, the
+        jail wing, and the labour yard beyond it.</li>
+      <li><b>Answer what it asks.</b> Every exhibit asks a question about what
+        you just read. Fast answers and streaks are worth more.</li>
+      <li><b>Watch for the officer.</b> A policeman walks the whole map looking
+        for you. When he stops you he asks a question about wherever you are —
+        right and he waves you on, wrong and he takes one of your
+        <b>three hearts</b>. He is slower than you: run.</li>
+      <li><b>File your score</b> at the ledger on the counter.</li>
+    </ol>
+    <div class="quality">
+      <span class="quality-label">GRAPHICS</span>
+      <div class="quality-picker" id="qualityPicker"></div>
+      <span class="quality-note" id="qualityNote"></span>
+    </div>
+    <button class="begin" id="begin">ENTER THE SHOP</button>
+  </div>
+</div>
+
+<!-- ------------------------------------------------------------- print -->
+<aside class="panel" id="printPanel">
+  <div class="panel-head">THE PRINT RACK <button class="close" data-close aria-label="Close">×</button></div>
+  <div class="panel-body">
+    <div class="eyebrow">Printed media · six issues</div>
+    <h2>The revolutionary press.</h2>
+    <p class="lede">Every sheet on this rack carries one turn in Sanyal’s life.</p>
+    <div class="paper-grid" id="papers"></div>
+    <div class="reader" id="paperReader">
+      <div class="reader-ref" data-ref></div>
+      <h3 id="paperHeadline"></h3>
+      <p id="paperBody"></p>
+    </div>
+  </div>
+</aside>
+
+<!-- ------------------------------------------------------------- radio -->
+<aside class="panel" id="radioPanel">
+  <div class="panel-head">VARANASI WIRELESS <button class="close" data-close aria-label="Close">×</button></div>
+  <div class="panel-body">
+    <div class="eyebrow">Radio media · archive broadcast</div>
+    <h2>Tune the signal.</h2>
+    <div class="radio-ui">
+      <div class="dial"></div>
+      <div class="radio-index" id="radioIndex"></div>
+      <div class="radio-text" id="radioText"></div>
+      <button class="pill" id="tune">TUNE NEXT BROADCAST</button>
+    </div>
+    <div class="reader show" id="radioReader"></div>
+  </div>
+</aside>
+
+<!-- ---------------------------------------------------------------- tv -->
+<aside class="panel" id="tvPanel">
+  <div class="panel-head">THE MOVING PICTURE <button class="close" data-close aria-label="Close">×</button></div>
+  <div class="panel-body">
+    <div class="eyebrow">Television media · visual archive</div>
+    <h2>The story on screen.</h2>
+    <div class="tv">
+      <div class="tv-screen">
+        <span id="frameTitle"></span>
+        <small id="frameCaption"></small>
+      </div>
+    </div>
+    <div class="radio-index" id="frameIndex"></div>
+    <button class="pill" id="nextFrame">CHANGE ARCHIVE CARD</button>
+    <div class="reader show" id="tvReader"></div>
+  </div>
+</aside>
+
+<!-- ------------------------------------------------------------- press -->
+<aside class="panel" id="pressPanel">
+  <div class="panel-head">THE COMPOSING BENCH <button class="close" data-close aria-label="Close">×</button></div>
+  <div class="panel-body">
+    <div class="eyebrow">Composing room · three plates</div>
+    <h2>How the words got out.</h2>
+    <p class="lede">Locked-up formes on the bench beside the press.</p>
+    <div class="paper-grid" id="plates"></div>
+    <div class="reader" id="plateReader">
+      <div class="reader-ref" data-ref></div>
+      <h3 id="plateHeadline"></h3>
+      <p id="plateBody"></p>
+    </div>
+  </div>
+</aside>
+
+<!-- ------------------------------------------------------------- files -->
+<aside class="panel" id="filesPanel">
+  <div class="panel-head">THE CASE CABINET <button class="close" data-close aria-label="Close">×</button></div>
+  <div class="panel-body">
+    <div class="eyebrow">Composing room · three files</div>
+    <h2>The prosecutions.</h2>
+    <p class="lede">Two cases opened his sentences. The third closed the file.</p>
+    <div class="paper-grid" id="files"></div>
+    <div class="reader" id="fileReader">
+      <div class="reader-ref" data-ref></div>
+      <h3 id="fileHeadline"></h3>
+      <p id="fileBody"></p>
+    </div>
+  </div>
+</aside>
+
+<!-- -------------------------------------------------------------- cells -->
+<aside class="panel" id="cellPanel">
+  <div class="panel-head"><span>CELL</span> <button class="close" data-close aria-label="Close">×</button></div>
+  <div class="panel-body">
+    <div class="eyebrow">The jail wing · Port Blair</div>
+    <h2>Inside the Cellular Jail.</h2>
+    <div class="reader show">
+      <div class="reader-ref" data-ref></div>
+      <h3 data-headline></h3>
+      <p data-body></p>
+    </div>
+  </div>
+</aside>
+
+<!-- --------------------------------------------------------------- yard -->
+<aside class="panel" id="yardPanel">
+  <div class="panel-head"><span>YARD</span> <button class="close" data-close aria-label="Close">×</button></div>
+  <div class="panel-body">
+    <div class="eyebrow">The labour yard · and what became of it</div>
+    <h2>What the sentence was.</h2>
+    <div class="reader show">
+      <div class="reader-ref" data-ref></div>
+      <h3 data-headline></h3>
+      <p data-body></p>
+    </div>
+  </div>
+</aside>
+
+<!-- --------------------------------------------------------- safe house -->
+<aside class="panel" id="safePanel">
+  <div class="panel-head"><span>SAFE HOUSE</span> <button class="close" data-close aria-label="Close">×</button></div>
+  <div class="panel-body">
+    <div class="eyebrow">The underground · reconstruction</div>
+    <h2>How a network worked.</h2>
+    <div class="reader show">
+      <div class="reader-ref" data-ref></div>
+      <h3 data-headline></h3>
+      <p data-body></p>
+    </div>
+  </div>
+</aside>
+
+<!-- ------------------------------------------------------ record office -->
+<aside class="panel" id="recPanel">
+  <div class="panel-head"><span>RECORD OFFICE</span> <button class="close" data-close aria-label="Close">×</button></div>
+  <div class="panel-body">
+    <div class="eyebrow">British intelligence · the file on him</div>
+    <h2>The hostile archive.</h2>
+    <div class="reader show">
+      <div class="reader-ref" data-ref></div>
+      <h3 data-headline></h3>
+      <p data-body></p>
+    </div>
+  </div>
+</aside>
+
+<!-- ----------------------------------------------------- memorial hall -->
+<aside class="panel" id="memPanel">
+  <div class="panel-head"><span>MEMORIAL HALL</span> <button class="close" data-close aria-label="Close">×</button></div>
+  <div class="panel-body">
+    <div class="eyebrow">The generation after · and the end of his own</div>
+    <h2>What outlived him.</h2>
+    <div class="reader show">
+      <div class="reader-ref" data-ref></div>
+      <h3 data-headline></h3>
+      <p data-body></p>
+    </div>
+  </div>
+</aside>
+
+<!-- ------------------------------------------------------------ ledger -->
+<aside class="panel wide" id="ledgerPanel">
+  <div class="panel-head">THE LEDGER <button class="close" data-close aria-label="Close">×</button></div>
+  <div class="panel-body">
+    <div class="eyebrow">File your score · the world board</div>
+    <h2>Sign the ledger.</h2>
+
+    <div class="scoring-note">
+      <span><b>+40</b> each exhibit you read</span>
+      <span><b>+100</b> each correct answer</span>
+      <span><b>+100</b> answering instantly, decaying over 20s</span>
+      <span><b>×2.00</b> at a five-answer streak</span>
+    </div>
+
+    <div class="entry">
+      <input id="username" maxlength="22" placeholder="YOUR NAME FOR THE BOARD" autocomplete="off" spellcheck="false">
+      <button class="begin small" id="fileScore">FILE</button>
+    </div>
+
+    <div class="board">
+      <h3 data-board-status data-online="no">WORLD LEADERBOARD</h3>
+      <div class="board-status" id="ledgerStatus">READY</div>
+      <div id="leaders"></div>
+    </div>
+  </div>
+</aside>
+
+<noscript>
+  <div class="intro"><div class="intro-card">
+    <h1>Sanyal’s Newsstand</h1>
+    <p>This game is built in WebGL and needs JavaScript enabled.</p>
+  </div></div>
+</noscript>
+
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>

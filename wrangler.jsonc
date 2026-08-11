@@ -1,0 +1,37 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+
+  // Cloudflare names must be lowercase alphanumeric with dashes. The public
+  // hostname derives from this value.
+  "name": "sanyal-newsstand",
+  "compatibility_date": "2026-08-05",
+
+  // The Worker exists only to serve /api/scores. Everything else — the whole
+  // 3D shop — is a static asset served straight from the edge.
+  "main": "./src/worker.js",
+
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+
+    // The game is one page. An unknown path is a genuine 404, not a route to
+    // rewrite, so this is deliberately NOT "single-page-application".
+    "not_found_handling": "none"
+  },
+
+  // "database_id" is intentionally omitted: Wrangler provisions the database on
+  // the first `wrangler deploy` and writes the id back into this file. To create
+  // it by hand instead, run `wrangler d1 create sanyal-newsstand` and paste the
+  // printed UUID in as "database_id".
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sanyal-newsstand",
+      "migrations_dir": "./migrations"
+    }
+  ],
+
+  "observability": {
+    "enabled": true
+  }
+}
